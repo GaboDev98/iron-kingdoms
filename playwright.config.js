@@ -14,6 +14,9 @@ export default defineConfig({
   // frames, so a whole spec can take well over a minute on a slow machine.
   timeout: 90_000,
   retries: process.env.CI ? 1 : 0,
+  // Software WebGL is CPU bound so parallel workers only starve each other.
+  // Running one at a time is no slower overall and keeps timings predictable.
+  workers: 1,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://localhost:4173',
