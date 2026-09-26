@@ -10,7 +10,9 @@ const channel = process.env.PW_CHANNEL || undefined;
 
 export default defineConfig({
   testDir: 'tests/e2e',
-  timeout: 45_000,
+  // Software WebGL renders at a few frames per second and every action waits on
+  // frames, so a whole spec can take well over a minute on a slow machine.
+  timeout: 90_000,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
