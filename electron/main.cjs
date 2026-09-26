@@ -1,4 +1,4 @@
-// Ventana de escritorio (Windows, macOS, Linux) que carga el juego compilado en dist/.
+// Desktop window (Windows, macOS, Linux) that loads the compiled game from dist/.
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
