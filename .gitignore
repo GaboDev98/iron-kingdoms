@@ -7,3 +7,5 @@ ios/App/Pods/
 .DS_Store
 *.log
 coverage/
+test-results/
+playwright-report/
