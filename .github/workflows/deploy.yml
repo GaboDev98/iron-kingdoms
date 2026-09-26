@@ -1,9 +1,11 @@
-# Publica el juego en GitHub Pages cada vez que haces push a main.
-name: Publicar en GitHub Pages
+# Publishes the game to GitHub Pages once CI has passed on main.
+name: Deploy to GitHub Pages
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
     branches: [main]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -17,11 +19,16 @@ concurrency:
 
 jobs:
   build:
+    # Never publish a red build. Manual runs are allowed through unconditionally.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          # workflow_run defaults to the default branch so pin the commit CI passed on.
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
