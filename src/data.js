@@ -1,23 +1,25 @@
-// Datos del juego: pueblos, objetos, misiones y enemigos.
-// Edita aquí para añadir contenido sin tocar la lógica.
-/* ---------- Datos ---------- */
-// Ambientación: el Danelaw (norte y este de Inglaterra bajo ley danesa), hacia el año 950.
+// Game content: playable peoples, items, quests, enemies and the shop.
+// Add content here without touching the engine. Player-facing text stays in Spanish.
+/** Historical setting. Every playable people must have existed at this date (see tests/unit/history.test.js). */
+export const SETTING = { place: 'Danelaw (northern and eastern England under Danish law)', year: 950 };
+
 export const RACES={
-  vikingos:{name:'Vikingos',one:'colono danés',init:'V',c1:'#4f6272',c2:'#c9a15a',blurb:'Colonos daneses asentados en el Danelaw desde el siglo IX. El hacha de mango largo era su arma más temida.',hp:120,str:14,def:4,spd:1.0,dmg:1.12,weapon:'hacha',armor:'tunica',
+  vikingos:{era:[793,1066],name:'Vikingos',one:'colono danés',init:'V',c1:'#4f6272',c2:'#c9a15a',blurb:'Colonos daneses asentados en el Danelaw desde el siglo IX. El hacha de mango largo era su arma más temida.',hp:120,str:14,def:4,spd:1.0,dmg:1.12,weapon:'hacha',armor:'tunica',
     look:{tunic:0x4f6272,pants:0x3a3226,skin:0xe9c7a4,hair:0xc9a15a,beard:true,helm:'nasal',helmC:0x8a8f93,shield:'round',shieldC:0x9b2f2a}},
-  anglosajones:{name:'Anglosajones',one:'guerrero anglosajón',init:'A',c1:'#7a6a3a',c2:'#7a2a1a',blurb:'Gente del reino de Inglaterra, unificado en 927. Lanza de fresno, seax y escudo redondo.',hp:112,str:11,def:5,spd:1.02,dmg:1.0,weapon:'lanza',armor:'tunica',
+  anglosajones:{era:[410,1066],name:'Anglosajones',one:'guerrero anglosajón',init:'A',c1:'#7a6a3a',c2:'#7a2a1a',blurb:'Gente del reino de Inglaterra, unificado en 927. Lanza de fresno, seax y escudo redondo.',hp:112,str:11,def:5,spd:1.02,dmg:1.0,weapon:'lanza',armor:'tunica',
     look:{tunic:0x7a6a3a,pants:0x4a3e30,skin:0xecc9a8,hair:0x8a6a40,beard:true,helm:'none',shield:'round',shieldC:0x7a2a1a}},
-  irlandeses:{name:'Irlandeses',one:'guerrero irlandés',init:'I',c1:'#3a5a3a',c2:'#b08d3c',blurb:'Guerreros gaélicos con poca armadura. Lanzaban jabalinas antes de trabarse cuerpo a cuerpo.',hp:95,str:10,def:3,spd:1.15,dmg:1.0,weapon:'jabalina',armor:'tunica',
+  irlandeses:{era:[400,1169],name:'Irlandeses',one:'guerrero irlandés',init:'I',c1:'#3a5a3a',c2:'#b08d3c',blurb:'Guerreros gaélicos con poca armadura. Lanzaban jabalinas antes de trabarse cuerpo a cuerpo.',hp:95,str:10,def:3,spd:1.15,dmg:1.0,weapon:'jabalina',armor:'tunica',
     look:{tunic:0x3a5a3a,pants:0x4a3a2a,skin:0xf2d2b8,hair:0x7a4a22,beard:true,helm:'none',shield:'round',shieldC:0x5a3a2a}},
-  escoceses:{name:'Escoceses',one:'guerrero de Alba',init:'E',c1:'#4a4a6a',c2:'#8a7a4a',blurb:'Del reino de Alba, al norte. Gaélicos en trato constante con los nórdicos; hacha de mano y escudo.',hp:108,str:12,def:4,spd:1.08,dmg:1.05,weapon:'hachamano',armor:'tunica',
+  escoceses:{era:[843,1286],name:'Escoceses',one:'guerrero de Alba',init:'E',c1:'#4a4a6a',c2:'#8a7a4a',blurb:'Del reino de Alba, al norte. Gaélicos en trato constante con los nórdicos; hacha de mano y escudo.',hp:108,str:12,def:4,spd:1.08,dmg:1.05,weapon:'hachamano',armor:'tunica',
     look:{tunic:0x4a4a6a,pants:0x3a3226,skin:0xecc9a8,hair:0x5a3a20,beard:true,helm:'none',shield:'round',shieldC:0x3a2a1a}},
-  francos:{name:'Francos',one:'guerrero franco',init:'F',c1:'#2c4a8a',c2:'#b9bec4',blurb:'De Francia Occidental. Sus espadas eran las mejores de Europa; los reyes carolingios prohibían venderlas a los nórdicos.',hp:105,str:12,def:6,spd:1.0,dmg:1.08,weapon:'carolingia',armor:'tunica',
+  francos:{era:[843,987],name:'Francos',one:'guerrero franco',init:'F',c1:'#2c4a8a',c2:'#b9bec4',blurb:'De Francia Occidental. Sus espadas eran las mejores de Europa; los reyes carolingios prohibían venderlas a los nórdicos.',hp:105,str:12,def:6,spd:1.0,dmg:1.08,weapon:'carolingia',armor:'tunica',
     look:{tunic:0x2c4a8a,pants:0x4a3e30,skin:0xecc6a2,hair:0x7a5230,helm:'nasal',helmC:0x9a9a9a,shield:'round',shieldC:0xb9bec4}},
-  bizantinos:{name:'Bizantinos',one:'soldado romano de Oriente',init:'B',c1:'#7a1f3d',c2:'#c9a44c',blurb:'Romanos de Constantinopla: así se llamaban a sí mismos. Reclutaban mercenarios nórdicos, antecedente de la Guardia Varega.',hp:110,str:11,def:4,spd:0.97,dmg:1.0,weapon:'spathion',armor:'klibanion',
+  bizantinos:{era:[330,1453],name:'Bizantinos',one:'soldado romano de Oriente',init:'B',c1:'#7a1f3d',c2:'#c9a44c',blurb:'Romanos de Constantinopla: así se llamaban a sí mismos. Reclutaban mercenarios nórdicos, antecedente de la Guardia Varega.',hp:110,str:11,def:4,spd:0.97,dmg:1.0,weapon:'spathion',armor:'klibanion',
     look:{tunic:0x7a1f3d,pants:0x5a4a3a,skin:0xd9a97f,hair:0x2a1d14,beard:true,helm:'round',helmC:0x8a8a8a,shield:'round',shieldC:0x7a1f3d}},
 };
-const RACE_MAP={ingleses:'anglosajones',sajones:'anglosajones',romanos:'bizantinos'};
-const ITEM_MAP={gladius:'spathion',scutum:'klibanion',francisca:'hachamano'};
+/** Old save ids mapped to their current equivalents (the game moved from a mixed setting to 950 AD). */
+export const RACE_MAP={ingleses:'anglosajones',sajones:'anglosajones',romanos:'bizantinos'};
+export const ITEM_MAP={gladius:'spathion',scutum:'klibanion',francisca:'hachamano'};
 export const ITEMS={
   hacha:{name:'Hacha danesa',icon:'🪓',type:'weapon',dmg:17,range:2.4,kind:'axe',price:45,desc:'Hacha de mango largo de los daneses.'},
   hachamano:{name:'Hacha de mano',icon:'🪓',type:'weapon',dmg:15,range:2.1,kind:'axe',price:30,desc:'Hacha corta de una mano.'},
@@ -57,6 +59,7 @@ export const ETYPES={
   jefe:{name:'Jefe de los proscritos',hp:170,dmg:17,spd:3.1,aggro:17,range:2.5,cd:1.6,xp:120},
 };
 export const SHOP=['pocion','pan','cota','arco','lanza'];
+/** Upgrades a save from any earlier version. Returns null if it can't be used. */
 export function migrate(s){
   if(!s||!s.race)return null;
   s.race=RACE_MAP[s.race]||s.race;if(!RACES[s.race])return null;
