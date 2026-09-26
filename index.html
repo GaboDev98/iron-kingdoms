@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#1b221d">
+<title>Reinos de Hierro</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="stats" class="hud box" style="display:none">
+  <div class="who" id="who"></div>
+  <div class="bar" id="hpbar"><i></i></div>
+  <div class="bar" id="xpbar"><i></i></div>
+  <div class="row"><span>Vida <b id="hpTxt"></b></span><span>Nv <b id="lvTxt"></b></span><span>🪙 <b id="coinTxt"></b></span></div>
+  <div id="sync">💾 Guardado local</div>
+</div>
+<div id="quest" class="hud box" style="display:none"><div class="t" id="qT"></div><div class="p" id="qP"></div></div>
+<div id="compass" class="hud box" style="display:none"><div id="arrow"><svg viewBox="0 0 24 24"><path d="M12 2 L19 20 L12 15.5 L5 20 Z" fill="#c9a44c" stroke="#1b1a12" stroke-width="1"/></svg></div><span id="cmpTxt"></span></div>
+<div id="toast" class="hud box"></div>
+<div id="prompt" class="hud box"></div>
+<div id="help" class="hud box desk-only" style="display:none">WASD mover · Shift correr · Clic o Espacio atacar · E hablar · I mochila · arrastra para girar</div>
+<div id="hurt"></div>
+<div id="joy"><div id="knob"></div></div>
+<div id="joyHint" class="hud touch-only" style="visibility:hidden">Arrastra aquí para moverte</div>
+<div id="btns" class="touch-only" style="visibility:hidden">
+  <button class="rb" id="bAtk" aria-label="Atacar"><div><span>⚔️</span>Atacar</div></button>
+  <button class="rb" id="bUse" aria-label="Hablar"><div><span>💬</span>Hablar</div></button>
+  <button class="rb" id="bInv" aria-label="Mochila"><div><span>🎒</span>Mochila</div></button>
+</div>
+<button id="bInvDesk" class="desk-only" style="display:none">🎒 Mochila (I)</button>
+
+<div id="dialog" class="sheet" role="dialog" aria-modal="true">
+  <h2 id="dlgName"></h2>
+  <div id="dlgText"></div>
+  <div class="opts" id="dlgOpts"></div>
+</div>
+
+<div id="inv" class="sheet" role="dialog" aria-modal="true">
+  <button class="x" id="invX" aria-label="Cerrar">✕</button>
+  <h2>Mochila</h2>
+  <div class="statline" id="invStats"></div>
+  <div class="equip">
+    <div class="eslot" id="eqW"></div>
+    <div class="eslot" id="eqA"></div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div id="detail">Toca un objeto para ver qué puedes hacer con él.</div>
+</div>
+
+<div id="dead"><div><h2>Has caído</h2><p id="deadTxt"></p><button id="revive">Volver a la aldea</button></div></div>
+
+<div id="start">
+  <div class="inner">
+    <h1>Reinos de Hierro</h1>
+    <p class="lead">Danelaw, hacia el año 950. Una aldea de daneses y anglosajones necesita ayuda: lobos en el bosque y proscritos en el camino a Jórvik. Elige tu pueblo y ponte en marcha.</p>
+    <div class="races" id="races"></div>
+    <div class="cta">
+      <button id="go" disabled>Elige un pueblo</button>
+      <button id="cont" style="display:none">Continuar partida</button>
+    </div>
+    <div class="note" id="startNote"></div>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
