@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
-// base './' = rutas relativas: sirve igual en GitHub Pages, Capacitor y Electron.
+// base './' keeps asset paths relative so the same build works on GitHub Pages, Capacitor and Electron.
 export default defineConfig(({ mode }) => ({
   base: './',
   plugins: mode === 'single' ? [viteSingleFile()] : [],

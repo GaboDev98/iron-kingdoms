@@ -1,35 +1,23 @@
-// Reinos de Hierro — lógica del juego (Three.js)
+// Reinos de Hierro — game runtime: rendering, input, AI and UI glue.
+// Game rules live in src/core/ (pure, unit-tested); content lives in src/data.js.
 import * as THREE from 'three';
 import { RACES, ITEMS, QUESTS, ETYPES, SHOP, migrate } from './data.js';
+import { CAMP, FOREST, WATER, WATER_BLOCK, rng, smoothstep as sm, terrainHeight as H, distToPath as onPath, isWalkable } from './core/world.js';
+import { INV_MAX, countItem as countIn, addItem as addTo, removeItem as removeFrom, equipFromSlot } from './core/inventory.js';
+import { xpNeed as xpFor, totalDefense, baseDamage, attackDamage, damageTaken, applyXp, deathPenalty } from './core/combat.js';
+import { evaluateQuest, recordKill, acceptQuest, completeQuest } from './core/quests.js';
+import { newState, SPAWN } from './core/state.js';
 
 const $=s=>document.querySelector(s);
 const isTouch=matchMedia('(pointer:coarse)').matches;
 
-const CAMP={x:72,z:58}, FOREST={x:-78,z:22,r:52}, LAKE={x:-12,z:-82};
-const INV_MAX=20;
-
-/* ---------- Utilidades ---------- */
-function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+/* ---------- Helpers ---------- */
 const R=rng(20260926);
-const sm=(e0,e1,x)=>{const t=Math.min(1,Math.max(0,(x-e0)/(e1-e0)));return t*t*(3-2*t);};
-const lerp=(a,b,t)=>a+(b-a)*t;
-function H(x,z){
-  let h=Math.sin(x*0.045)*Math.cos(z*0.038)*3.2+Math.sin(x*0.012+1.3)*5+Math.cos(z*0.015+0.4)*4.5+Math.sin((x+z)*0.08)*0.7+1.5;
-  h*=sm(24,46,Math.hypot(x,z));
-  const fc=sm(18,34,Math.hypot(x-CAMP.x,z-CAMP.z)); h=h*fc+1.2*(1-fc);
-  h-=(1-sm(8,28,Math.hypot(x-LAKE.x,z-LAKE.z)))*8;
-  h+=sm(150,195,Math.max(Math.abs(x),Math.abs(z)))*28;
-  return h;
-}
-const WATER=-3, WATER_BLOCK=-2.5;
-function segDist(px,pz,ax,az,bx,bz){const dx=bx-ax,dz=bz-az;let t=((px-ax)*dx+(pz-az)*dz)/(dx*dx+dz*dz);t=Math.max(0,Math.min(1,t));return Math.hypot(px-ax-dx*t,pz-az-dz*t);}
-const PATHS=[[0,0,CAMP.x,CAMP.z],[0,0,-46,16],[0,0,-10,-58]];
-const onPath=(x,z)=>Math.min(...PATHS.map(p=>segDist(x,z,p[0],p[1],p[2],p[3])));
 const matCache={};
 const M=(c,e)=>{const k=c+'_'+(e||0);return matCache[k]||(matCache[k]=new THREE.MeshLambertMaterial({color:c,emissive:e||0}));};
 const box=(w,h,d,c)=>new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c));
 
-/* ---------- Escena ---------- */
+/* ---------- Scene ---------- */
 const canvas=$('#c');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:!isTouch,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,isTouch?1.5:2));
@@ -48,7 +36,7 @@ sun.shadow.mapSize.set(isTouch?1024:2048,isTouch?1024:2048);
 Object.assign(sun.shadow.camera,{left:-30,right:30,top:30,bottom:-30,near:1,far:120});
 scene.add(sun,sun.target);
 
-// Terreno
+// Terrain
 const SEG=isTouch?120:160;
 const tg=new THREE.PlaneGeometry(400,400,SEG,SEG);tg.rotateX(-Math.PI/2);
 {
@@ -71,7 +59,7 @@ const water=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshLamber
 water.rotation.x=-Math.PI/2;water.position.y=WATER;scene.add(water);
 
 const colliders=[];
-// Árboles
+// Trees
 {
   const trees=[];let tries=0;
   while(trees.length<(isTouch?220:300)&&tries<8000){tries++;
@@ -101,7 +89,7 @@ const colliders=[];
     const sc=.5+R()*1.4;q.setFromEuler(new THREE.Euler(R()*3,R()*3,R()*3));s.set(sc,sc*.7,sc);p.set(x,H(x,z)+sc*.2,z);m.compose(p,q,s);rocks.setMatrixAt(n++,m);colliders.push({x,z,r:sc*.8});}
   scene.add(rocks);
 }
-// Aldea
+// Village
 function house(a,r,wallC,roofC){
   const x=Math.cos(a)*r,z=Math.sin(a)*r,g=new THREE.Group();
   const w=box(6,3.2,5,wallC);w.position.y=1.6;g.add(w);
@@ -115,20 +103,20 @@ function house(a,r,wallC,roofC){
   scene.add(g);colliders.push({x,z,r:3.6});
 }
 [[6.08,18,0xcdbb95,0x8a6d3b],[1.45,18,0xc4b08a,0x7a5a2e],[2.1,19,0xd2c29e,0x8a6d3b],[3.4,18,0xbfae8c,0x6b4a2a],[3.95,19,0xcdbb95,0x7a5a2e],[5.0,18,0xc9b690,0x8a6d3b],[5.55,20,0xd2c29e,0x6b4a2a]].forEach(h=>house(...h));
-{ // pozo
+{ // well
   const g=new THREE.Group();const base=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.3,1,10),M(0x8b867a));base.position.y=.5;g.add(base);
   [-0.9,0.9].forEach(px=>{const p=box(.15,2.2,.15,0x4a3322);p.position.set(px,1.6,0);g.add(p);});
   const rf=new THREE.Mesh(new THREE.ConeGeometry(1.5,.9,4),M(0x6b4a2a));rf.rotation.y=Math.PI/4;rf.position.y=3;g.add(rf);
   g.traverse(o=>{if(o.isMesh)o.castShadow=true;});scene.add(g);colliders.push({x:0,z:0,r:1.5});
 }
-{ // puesto del herrero
+{ // blacksmith stall
   const g=new THREE.Group();const t=box(3.2,1,1.3,0x6b4a2b);t.position.y=.5;g.add(t);
   [[-1.5,-.6],[1.5,-.6],[-1.5,.6],[1.5,.6]].forEach(([px,pz])=>{const p=box(.12,2.6,.12,0x4a3322);p.position.set(px,1.3,pz);g.add(p);});
   const cn=box(3.6,.12,1.8,0x8a2b24);cn.position.y=2.6;cn.rotation.x=.12;g.add(cn);
   const anv=box(.7,.5,.35,0x444444);anv.position.set(1.9,.55,1.4);g.add(anv);
   g.position.set(-9,0,6);g.rotation.y=Math.atan2(9,-6);g.traverse(o=>{if(o.isMesh)o.castShadow=true;});scene.add(g);colliders.push({x:-9,z:6,r:1.8});
 }
-// Campamento
+// Bandit camp
 let fireLight;
 {
   const baseY=H(CAMP.x,CAMP.z);
@@ -141,7 +129,7 @@ let fireLight;
     const x=CAMP.x+Math.cos(a)*18,z=CAMP.z+Math.sin(a)*18;const st=new THREE.Mesh(new THREE.CylinderGeometry(.18,.22,2.6,5),M(0x5a3f28));st.position.set(x,H(x,z)+1.2,z);st.castShadow=!isTouch;scene.add(st);colliders.push({x,z,r:.35});}
 }
 
-/* ---------- Personajes ---------- */
+/* ---------- Characters ---------- */
 function weaponMesh(id){
   const it=ITEMS[id],g=new THREE.Group(),inner=new THREE.Group();g.add(inner);
   const wood=0x6b4a2b,steel=0xb9bec4;
@@ -211,44 +199,29 @@ function hpBar(){
   return {g,fg,set(r){fg.scale.x=Math.max(.001,r);fg.position.x=-(1-r)/2;}};
 }
 
-/* ---------- Estado ---------- */
+/* ---------- State ---------- */
 let state=null,P=null,started=false,paused=false,isDead=false;
 const NPCS=[];
 const enemies=[],arrows=[],loot=[],herbs=[],floaters=[];
-function newState(race){
-  const r=RACES[race];
-  return {v:1,race,hp:r.hp,maxHp:r.hp,str:r.str,def:r.def,level:1,xp:0,coins:15,
-    inv:[{id:'pocion',q:2},{id:'pan',q:3}],eq:{weapon:r.weapon,armor:r.armor},
-    quest:{idx:0,status:'available',progress:0},pos:{x:2,z:10},bossLoot:false,t:Date.now()};
-}
-const countItem=id=>state.inv.reduce((n,s)=>n+(s.id===id?s.q:0),0);
-function addItem(id,q=1){
-  const it=ITEMS[id];
-  if(it.stack){const s=state.inv.find(s=>s.id===id);if(s){s.q+=q;onInvChange();return true;}}
-  if(state.inv.length>=INV_MAX){toast('La mochila está llena');return false;}
-  if(it.stack) state.inv.push({id,q}); else for(let i=0;i<q;i++){if(state.inv.length>=INV_MAX)break;state.inv.push({id,q:1});}
-  onInvChange();return true;
-}
-function removeItem(id,q=1){
-  for(let i=state.inv.length-1;i>=0&&q>0;i--){const s=state.inv[i];if(s.id!==id)continue;const k=Math.min(q,s.q);s.q-=k;q-=k;if(s.q<=0)state.inv.splice(i,1);}
-  onInvChange();
-}
+const countItem=id=>countIn(state.inv,id);
+function addItem(id,q=1){if(!addTo(state.inv,id,q)){toast('La mochila está llena');return false;}onInvChange();return true;}
+function removeItem(id,q=1){removeFrom(state.inv,id,q);onInvChange();}
 function onInvChange(){checkQuest();scheduleSave();if($('#inv').style.display==='block')renderInv();}
 const weapon=()=>ITEMS[state.eq.weapon];
-const armorDef=()=>state.def+(ITEMS[state.eq.armor]?.def||0);
-const xpNeed=()=>80+state.level*60;
+const armorDef=()=>totalDefense(state);
+const xpNeed=()=>xpFor(state.level);
 
-/* ---------- Guardado (local + nube) ---------- */
+/* ---------- Saving (local + Claude cloud) ---------- */
 const LS='reinos-hierro-partida-v1';
 let savedGame=null,db=null,uid=null,saveTimer=0,autoT=0;
-try{const s=localStorage.getItem(LS);if(s)savedGame=migrate(JSON.parse(s));}catch(e){}
+try{const s=localStorage.getItem(LS);if(s)savedGame=migrate(JSON.parse(s));}catch{/* storage unavailable: start without a save */}
 const docPath=()=>`data/users/${uid}/partidas/principal`;
 function scheduleSave(){clearTimeout(saveTimer);saveTimer=setTimeout(saveNow,1200);}
 function saveNow(){
   if(!state)return;
   if(P){state.pos={x:+P.x.toFixed(2),z:+P.z.toFixed(2)};}
   state.t=Date.now();
-  try{localStorage.setItem(LS,JSON.stringify(state));}catch(e){}
+  try{localStorage.setItem(LS,JSON.stringify(state));}catch{/* storage full or blocked: keep playing */}
   if(db&&uid){db.doc(docPath()).set({save:JSON.parse(JSON.stringify(state))}).catch(e=>console.warn('save',e&&e.code));}
 }
 async function initCloud(){
@@ -266,7 +239,7 @@ async function initCloud(){
 }
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&started)saveNow();});
 
-/* ---------- Pantalla inicial ---------- */
+/* ---------- Start screen ---------- */
 let chosen=null;
 function statBar(label,v,max){return `<span>${label}</span><i style="width:${Math.round(v/max*100)}%"></i>`;}
 function renderRaces(){
@@ -311,7 +284,7 @@ function previewRace(k){
   preview.group.position.set(2,H(2,10),10);preview.group.rotation.y=.6;
 }
 
-/* ---------- Mundo vivo ---------- */
+/* ---------- Living world ---------- */
 function spawnNPCs(){
   const edda=makeHumanoid({tunic:0x6a4e6e,pants:0x4a3a4a,skin:0xe6c3a4,hair:0xcfcfcf,helm:'hood',helmC:0x5a4a5a});
   edda.group.position.set(4,0,-2.5);edda.group.rotation.y=Math.atan2(-2,12);
@@ -351,7 +324,7 @@ function dropLoot(x,z,what){
   loot.push({...what,g,x:x+ox,z:z+oz,t:90});
 }
 
-/* ---------- Jugador ---------- */
+/* ---------- Player ---------- */
 function buildPlayer(){
   const r=RACES[state.race];
   if(preview){scene.remove(preview.group);preview=null;}
@@ -371,7 +344,7 @@ function startGame(s){
   toast(state.quest.idx===0&&state.quest.status==='available'?'Habla con Edda la curandera, junto al pozo':`Bienvenido de vuelta`);
 }
 
-/* ---------- Entrada ---------- */
+/* ---------- Input ---------- */
 const keys={};let atkHeld=false,yaw=0,pitch=.42;
 const joy={id:null,ox:0,oy:0,x:0,y:0};const drag={id:null,x:0,y:0,moved:0};
 addEventListener('keydown',e=>{
@@ -408,7 +381,7 @@ holdBtn($('#bUse'),()=>{if(!paused)interact();});
 holdBtn($('#bInv'),toggleInv);
 $('#bInvDesk').onclick=toggleInv;
 
-/* ---------- Combate ---------- */
+/* ---------- Combat ---------- */
 function nearestEnemy(maxD,facingOnly){
   let best=null,bd=maxD;const fx=Math.sin(P.rot),fz=Math.cos(P.rot);
   for(const e of enemies){if(e.dead)continue;const dx=e.x-P.x,dz=e.z-P.z,d=Math.hypot(dx,dz);
@@ -433,7 +406,7 @@ function attack(){
       const reach=w.range+(e.type==='jefe'?.6:.2);if(d<reach&&(d<.8||(dx*fx+dz*fz)/d>0.1))hitEnemy(e,rollDmg());}},110);
   }
 }
-function rollDmg(){const w=weapon(),r=RACES[state.race];let d=(w.dmg+state.str*.6)*r.dmg*(.85+Math.random()*.3);const crit=Math.random()<.1;if(crit)d*=1.6;return{v:Math.round(d),crit};}
+function rollDmg(){return attackDamage(state);}
 function hitEnemy(e,{v,crit}){
   e.hp-=v;e.aggro=true;e.hurtT=.18;e.bar.g.visible=true;e.bar.set(Math.max(0,e.hp/e.maxHp));
   floatText(`${v}`,e.x,H(e.x,e.z)+(e.type==='lobo'?1.4:2.4),e.z,crit?'crit':'');
@@ -443,7 +416,7 @@ function killEnemy(e){
   const T=ETYPES[e.type];e.dead=true;e.m.group.visible=false;e.bar.g.visible=false;e.resp=e.type==='jefe'?180:40;
   gainXp(T.xp);
   const q=QUESTS[state.quest.idx];
-  if(q&&state.quest.status==='active'&&q.type==='kill'&&q.target===e.type){state.quest.progress++;checkQuest();}
+  if(recordKill(state,e.type))checkQuest();
   if(e.type==='lobo'){if(Math.random()<.75)dropLoot(e.x,e.z,{item:'piel'});}
   else if(e.type==='bandido'){dropLoot(e.x,e.z,{coins:6+Math.floor(Math.random()*9)});if(Math.random()<.3)dropLoot(e.x,e.z,{item:'pan'});if(Math.random()<.12)dropLoot(e.x,e.z,{item:'pocion'});}
   else{dropLoot(e.x,e.z,{coins:60});
@@ -453,38 +426,29 @@ function killEnemy(e){
   updateHUD();scheduleSave();
 }
 function gainXp(n){
-  state.xp+=n;
-  while(state.xp>=xpNeed()){state.xp-=xpNeed();state.level++;state.maxHp+=12;state.str+=1;state.hp=state.maxHp;toast(`¡Nivel ${state.level}! Más vida y más fuerza`);}
+  if(applyXp(state,n))toast(`¡Nivel ${state.level}! Más vida y más fuerza`);
   updateHUD();
 }
 function hurtPlayer(dmg){
   if(isDead)return;
-  const d=armorDef(),v=Math.max(1,Math.round(dmg*(1-d/(d+20))*(.85+Math.random()*.3)));
+  const v=damageTaken(dmg,armorDef());
   state.hp-=v;P.lastHurt=clock;floatText(`-${v}`,P.x,H(P.x,P.z)+2.4,P.z,'me');
   const h=$('#hurt');h.style.opacity=.9;setTimeout(()=>h.style.opacity=0,160);
   if(state.hp<=0){state.hp=0;die();}
   updateHUD();
 }
 function die(){
-  isDead=true;const lost=Math.floor(state.coins*.2);state.coins-=lost;
+  isDead=true;const lost=deathPenalty(state.coins);state.coins-=lost;
   $('#deadTxt').textContent=lost?`Perdiste ${lost} peniques de plata en la huida.`:'Los aldeanos te llevaron de vuelta.';
   $('#dead').style.display='grid';atkHeld=false;
 }
 $('#revive').onclick=()=>{
-  isDead=false;$('#dead').style.display='none';state.hp=Math.round(state.maxHp*.6);P.x=2;P.z=10;
+  isDead=false;$('#dead').style.display='none';state.hp=Math.round(state.maxHp*.6);P.x=SPAWN.x;P.z=SPAWN.z;
   enemies.forEach(e=>{e.aggro=false;});updateHUD();saveNow();
 };
 
-/* ---------- Misiones y diálogos ---------- */
-function checkQuest(){
-  const q=QUESTS[state.quest.idx],s=state.quest;if(!q)return;
-  if(s.status==='active'||s.status==='ready'){
-    if(q.type!=='kill')s.progress=countItem(q.item);
-    const was=s.status;s.status=s.progress>=q.goal?'ready':'active';
-    if(was==='active'&&s.status==='ready')toast('Misión lista: vuelve con Edda la curandera');
-  }
-  updateHUD();
-}
+/* ---------- Quests and dialogue ---------- */
+function checkQuest(){if(evaluateQuest(state))toast('Misión lista: vuelve con Edda la curandera');updateHUD();}
 function openDialog(name,text,opts){
   paused=true;atkHeld=false;$('#dlgName').textContent=name;$('#dlgText').textContent=text;
   const box=$('#dlgOpts');box.innerHTML='';
@@ -496,16 +460,14 @@ function talkEdda(){
   const q=QUESTS[state.quest.idx],s=state.quest.status,r=RACES[state.race];
   if(!q)return openDialog('Edda la curandera','La aldea te debe mucho. Sigue explorando: los lobos y los proscritos siempre vuelven.',[{label:'Adiós',fn:closeDialog}]);
   if(s==='available')openDialog('Edda la curandera',q.intro(r),[
-    {label:`Aceptar: ${q.title}`,main:true,fn:()=>{state.quest.status='active';state.quest.progress=0;checkQuest();toast(`Nueva misión: ${q.title}`);closeDialog();scheduleSave();}},
+    {label:`Aceptar: ${q.title}`,main:true,fn:()=>{acceptQuest(state);checkQuest();toast(`Nueva misión: ${q.title}`);closeDialog();scheduleSave();}},
     {label:'Ahora no',fn:closeDialog}]);
   else if(s==='active')openDialog('Edda la curandera',`${q.remind} (${q.label}: ${state.quest.progress}/${q.goal})`,[{label:'Voy para allá',fn:closeDialog}]);
   else{
     const rw=q.reward,items=rw.items.map(([id,n])=>`${ITEMS[id].icon} ${ITEMS[id].name}${n>1?' ×'+n:''}`).join(', ');
     openDialog('Edda la curandera',`${q.done}\n\nRecompensa: ${rw.coins} peniques de plata, ${rw.xp} de experiencia, ${items}.`,[
       {label:'Recibir recompensa',main:true,fn:()=>{
-        if(q.type!=='kill')removeItem(q.item,q.goal);
-        state.coins+=rw.coins;rw.items.forEach(([id,n])=>addItem(id,n));gainXp(rw.xp);
-        state.quest={idx:state.quest.idx+1,status:'available',progress:0};
+        const res=completeQuest(state);if(!res)return;onInvChange();gainXp(res.xp);
         closeDialog();toast(`Misión completada: ${q.title}`);updateHUD();saveNow();}}]);
   }
 }
@@ -520,14 +482,14 @@ function talkOsric(){
 let nearNpc=null;
 function interact(){if(nearNpc)nearNpc.talk();}
 
-/* ---------- Mochila ---------- */
+/* ---------- Inventory ---------- */
 let selSlot=-1;
 function toggleInv(){if(!started)return;if($('#inv').style.display==='block')closeInv();else{closeDialog();paused=true;atkHeld=false;selSlot=-1;renderInv();$('#inv').style.display='block';}}
 function closeInv(){if($('#inv').style.display!=='block')return;$('#inv').style.display='none';paused=$('#dialog').style.display==='block';}
 $('#invX').onclick=closeInv;
 function renderInv(){
   const w=weapon(),a=ITEMS[state.eq.armor],r=RACES[state.race];
-  $('#invStats').innerHTML=`<span>${r.name}</span><span>Nivel <b>${state.level}</b></span><span>Vida <b>${Math.ceil(state.hp)}/${state.maxHp}</b></span><span>Daño <b>${Math.round((w.dmg+state.str*.6)*r.dmg)}</b></span><span>Defensa <b>${armorDef()}</b></span><span>🪙 <b>${state.coins}</b></span>`;
+  $('#invStats').innerHTML=`<span>${r.name}</span><span>Nivel <b>${state.level}</b></span><span>Vida <b>${Math.ceil(state.hp)}/${state.maxHp}</b></span><span>Daño <b>${Math.round(baseDamage(state))}</b></span><span>Defensa <b>${armorDef()}</b></span><span>🪙 <b>${state.coins}</b></span>`;
   $('#eqW').innerHTML=`<span class="ic">${w.icon}</span><div>${w.name}<small>Arma · daño ${w.dmg}${w.ranged?' · a distancia':''}</small></div>`;
   $('#eqA').innerHTML=`<span class="ic">${a.icon}</span><div>${a.name}<small>Armadura · defensa ${a.def}</small></div>`;
   let html='';
@@ -546,9 +508,8 @@ function renderInv(){
   if(it.type!=='quest')btn('Tirar',()=>{removeItem(s.id,1);if(!state.inv[selSlot])selSlot=-1;renderInv();});
 }
 function equip(i){
-  const s=state.inv[i],it=ITEMS[s.id],slot=it.type==='weapon'?'weapon':'armor';
-  const old=state.eq[slot];state.inv.splice(i,1);state.eq[slot]=s.id;state.inv.push({id:old,q:1});
-  if(slot==='weapon')setWeapon(P.h,s.id);
+  const id=equipFromSlot(state,i);if(!id)return;const it=ITEMS[id];
+  if(it.type==='weapon')setWeapon(P.h,id);
   selSlot=-1;toast(`Equipaste ${it.name}`);onInvChange();renderInv();
 }
 
@@ -576,9 +537,9 @@ function objective(){
 const tmpV=new THREE.Vector3();
 function floatText(t,x,y,z,cls){const el=document.createElement('div');el.className='dmg '+(cls||'');el.textContent=t;document.body.appendChild(el);floaters.push({el,x,y,z,t:0});}
 
-/* ---------- Bucle ---------- */
+/* ---------- Main loop ---------- */
 let clock=0,last=performance.now();
-function movable(x,z){return H(x,z)>WATER_BLOCK&&Math.abs(x)<172&&Math.abs(z)<172;}
+const movable=isWalkable;
 function resolve(o,rad){for(const c of colliders){const dx=o.x-c.x,dz=o.z-c.z,rr=c.r+rad;if(dx>rr||dx<-rr||dz>rr||dz<-rr)continue;const d=Math.hypot(dx,dz);if(d<rr&&d>1e-4){o.x=c.x+dx/d*rr;o.z=c.z+dz/d*rr;}}}
 function animHuman(h,walk,moving,atkT,ranged){
   const s=moving?Math.sin(walk):0;
@@ -587,7 +548,7 @@ function animHuman(h,walk,moving,atkT,ranged){
 }
 function update(dt){
   clock+=dt;
-  // Movimiento
+  // Movement
   let ix=0,iy=0;
   if(keys['w']||keys['arrowup'])iy+=1;if(keys['s']||keys['arrowdown'])iy-=1;if(keys['d']||keys['arrowright'])ix+=1;if(keys['a']||keys['arrowleft'])ix-=1;
   if(joy.id!==null){ix+=joy.x;iy-=joy.y;}
@@ -605,15 +566,15 @@ function update(dt){
   P.atkCd-=dt;P.atkT=Math.max(0,P.atkT-dt);
   if(atkHeld)attack();
   const g=P.h.group;g.position.set(P.x,H(P.x,P.z),P.z);g.rotation.y=P.rot;animHuman(P.h,P.walk,moving,P.atkT,weapon().ranged);
-  // Regeneración fuera de combate
+  // Out-of-combat regeneration
   if(!isDead&&clock-P.lastHurt>6&&state.hp<state.maxHp){P.regenT+=dt;if(P.regenT>1){P.regenT=0;state.hp=Math.min(state.maxHp,state.hp+1+state.level*.3);updateHUD();}}
-  // Enemigos
+  // Enemies
   for(const e of enemies)updateEnemy(e,dt);
-  // Flechas
+  // Projectiles
   for(let i=arrows.length-1;i>=0;i--){const a=arrows[i];a.life-=dt;a.m.position.addScaledVector(a.dir,32*dt);let hit=false;
     for(const e of enemies){if(e.dead)continue;const dy=a.m.position.y-H(e.x,e.z);if(Math.hypot(e.x-a.m.position.x,e.z-a.m.position.z)<(e.type==='jefe'?1.2:.9)&&dy>0&&dy<2.8){hitEnemy(e,a.dmg);hit=true;break;}}
     if(hit||a.life<=0||a.m.position.y<H(a.m.position.x,a.m.position.z)){scene.remove(a.m);arrows.splice(i,1);}}
-  // Botín
+  // Loot and herbs
   for(let i=loot.length-1;i>=0;i--){const l=loot[i];l.t-=dt;l.g.rotation.y+=dt*2;l.g.position.y=H(l.x,l.z)+.5+Math.sin(clock*3+i)*.12;
     if(!isDead&&Math.hypot(l.x-P.x,l.z-P.z)<1.7){let ok=true;
       if(l.coins){state.coins+=l.coins;floatText(`+${l.coins} 🪙`,P.x,H(P.x,P.z)+2.4,P.z,'heal');updateHUD();scheduleSave();}
@@ -625,7 +586,7 @@ function update(dt){
     h.g.children[0].rotation.y+=dt*1.5;
     if(Math.hypot(h.x-P.x,h.z-P.z)<1.6&&addItem('hierba',1)){h.active=false;h.g.visible=false;h.resp=70;toast('🌿 Hierba curativa');}
   }
-  // PNJ cercano
+  // Nearby NPC
   nearNpc=null;for(const n of NPCS){if(Math.hypot(n.x-P.x,n.z-P.z)<3.4)nearNpc=n;}
   const pr=$('#prompt');
   if(nearNpc){pr.style.display='block';pr.textContent=isTouch?`${nearNpc.name}: toca Hablar`:`E para hablar con ${nearNpc.name}`;}else pr.style.display='none';
@@ -670,18 +631,18 @@ function updateCamera(dt){
   sun.position.set(tx+25,ty+45,tz+18);sun.target.position.set(tx,ty,tz);
 }
 function frameUI(dt){
-  // PNJ, marcas y fuego
+  // NPCs, quest marker and campfire
   NPCS.forEach(n=>{n.h.group.position.y=H(n.x,n.z);animHuman(n.h,clock*2,false,0,false);});
   const edda=NPCS[0];
   if(edda&&state){const s=state.quest.status,show=QUESTS[state.quest.idx]&&s!=='active';edda.mark.visible=show;
     edda.mark.material.color.setHex(s==='ready'?0x8fe36a:0xe8c35a);edda.mark.position.set(edda.x,H(edda.x,edda.z)+2.9+Math.sin(clock*3)*.12,edda.z);edda.mark.rotation.y+=dt*2;}
   if(fireLight)fireLight.intensity=1.1+Math.sin(clock*13)*.15+Math.sin(clock*7.3)*.1;
-  // Brújula
+  // Compass
   if(started){const o=objective();const cmp=$('#compass');
     if(o){cmp.style.visibility='';const th=Math.atan2(o.x-P.x,o.z-P.z),ch=yaw+Math.PI;const rel=th-ch;
       $('#arrow svg').style.transform=`rotate(${-rel}rad)`;$('#cmpTxt').textContent=`${o.label} · ${Math.round(Math.hypot(o.x-P.x,o.z-P.z))} m`;}
     else cmp.style.visibility='hidden';}
-  // Textos flotantes
+  // Floating combat text
   for(let i=floaters.length-1;i>=0;i--){const f=floaters[i];f.t+=dt;
     tmpV.set(f.x,f.y+f.t*1.2,f.z).project(camera);
     if(f.t>.9||tmpV.z>1){f.el.remove();floaters.splice(i,1);continue;}
@@ -695,7 +656,7 @@ function loop(now){
 }
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 
-/* ---------- Inicio ---------- */
+/* ---------- Boot ---------- */
 spawnNPCs();spawnWorld();renderRaces();refreshContinue();previewRace('vikingos');
 $('#startNote').textContent='Tu partida se guarda automáticamente.';
 initCloud();
