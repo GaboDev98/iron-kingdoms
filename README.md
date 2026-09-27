@@ -90,7 +90,7 @@ CI leaves `PW_CHANNEL` unset and uses the bundled Chromium.
 
 1. In your repository, go to **Settings → Pages** and set **Source** to
    **GitHub Actions**.
-2. Push to `main`. CI runs first, and `deploy.yml` publishes only if it passes.
+2. Push to `master`. CI runs first, and `deploy.yml` publishes only if it passes.
 3. The game lands at `https://YOUR_USER.github.io/reinos-de-hierro/`.
 
 The `dist/` folder that `npm run build` produces also works on
