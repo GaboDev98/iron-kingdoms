@@ -31,6 +31,10 @@ JavaScript, no framework.
 Playwright ships no Chromium for macOS 12 and older. On such a machine run the
 suite against an installed browser: `PW_CHANNEL=chrome npm run test:e2e`.
 
+To launch and drive the game by hand, use the `run-game` skill. It covers
+`.claude/launch.json` and the frame-rate traps that come with a hidden browser
+pane.
+
 ## Architecture
 
 Three layers. The split is what makes the game testable, so keep it.
