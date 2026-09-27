@@ -101,4 +101,4 @@ cover the new era range in the history test
 
 CI runs lint, unit tests and the end-to-end suite on every push and pull
 request, and uploads the coverage and Playwright reports as artifacts. The
-GitHub Pages deploy waits for CI to pass on `main`.
+GitHub Pages deploy waits for CI to pass on `master`.
